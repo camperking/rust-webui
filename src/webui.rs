@@ -21,10 +21,10 @@ use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::os::raw::c_char;
+use std::sync::LazyLock;
+use std::sync::{Mutex, MutexGuard};
 
 use bindgen::*;
-use lazy_static::lazy_static;
-use std::sync::{Mutex, MutexGuard};
 
 // Consts
 pub const true_: u32 = 1;
@@ -78,33 +78,23 @@ pub enum WebUIRuntime {
     NodeJS = 2,
 }
 
-// Events
-pub enum WebUIEvent {
-    WebUiEventDisconnected = 0,
-    WebUiEventConnected = 1,
-    WebUiEventMultiConnection = 2,
-    WebUiEventUnwantedConnection = 3,
-    WebUiEventMouseClick = 4,
-    WebUiEventNavigation = 5,
-    WebUiEventCallback = 6,
-}
+pub type WebUIEvent = webui_event;
 
 // Implement into<usize>
 impl WebUIEvent {
     pub fn from_usize(value: usize) -> WebUIEvent {
         match value {
-            0 => WebUIEvent::WebUiEventDisconnected,
-            1 => WebUIEvent::WebUiEventConnected,
-            2 => WebUIEvent::WebUiEventMultiConnection,
-            3 => WebUIEvent::WebUiEventUnwantedConnection,
-            4 => WebUIEvent::WebUiEventMouseClick,
-            5 => WebUIEvent::WebUiEventNavigation,
-            6 => WebUIEvent::WebUiEventCallback,
-            _ => WebUIEvent::WebUiEventCallback,
+            0 => WebUIEvent::WEBUI_EVENT_DISCONNECTED,
+            1 => WebUIEvent::WEBUI_EVENT_CONNECTED,
+            2 => WebUIEvent::WEBUI_EVENT_MOUSE_CLICK,
+            3 => WebUIEvent::WEBUI_EVENT_NAVIGATION,
+            4 => WebUIEvent::WEBUI_EVENT_CALLBACK,
+            _ => WebUIEvent::WEBUI_EVENT_CALLBACK,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct JavaScript {
     pub timeout: usize,
     pub script: String,
@@ -116,7 +106,7 @@ pub struct JavaScript {
 pub struct Event {
     pub window: usize,
     pub event_type: WebUIEvent,
-    pub element: *mut c_char,
+    pub element: String,
     pub event_number: usize,
     pub bind_id: usize,
 }
@@ -155,12 +145,20 @@ impl Window {
         show_browser(self.id, content.as_ref(), browser)
     }
 
+    pub fn start_server(&self, content: impl AsRef<str>) -> String {
+        start_server(self.id, content.as_ref())
+    }
+
     pub fn is_shown(&self) -> bool {
         is_shown(self.id)
     }
 
-    pub fn bind(&self, element: impl AsRef<str>, func: fn(Event)) {
-        bind(self.id, element.as_ref(), func);
+    pub fn get_port(&self) -> usize {
+        get_port(self.id)
+    }
+
+    pub fn bind(&self, element: impl AsRef<str>, func: fn(Event)) -> usize {
+        bind(self.id, element.as_ref(), func)
     }
 
     pub fn run_js(&self, js: impl AsRef<str>) -> JavaScript {
@@ -178,6 +176,10 @@ impl Window {
 
     pub fn set_icon(&self, icon: impl AsRef<str>, kind: impl AsRef<str>) {
         set_icon(self.id, icon.as_ref(), kind.as_ref());
+    }
+
+    pub fn set_root_folder(&self, folder: impl AsRef<str>) {
+        set_root_folder(self.id, folder.as_ref());
     }
 
     pub fn set_file_handler(
@@ -206,12 +208,9 @@ impl Drop for Window {
     }
 }
 
-// List of Rust user functions (2-dimensional array)
-// static mut func_list: [[Option::<fn(e: Event) -> ()>; 64]; 64] = [[64; 64]; 64];
-// static mut func_array: Vec<Vec<fn(Event)>> = vec![vec![]; 1024];
-// static mut elements_map = HashMap::<String, usize>::new();
-// static mut elements_map: HashMap::new();
+pub type WebUIConfig = webui_config;
 
+// List of Rust user functions (2-dimensional array)
 type FunctionType = fn(Event);
 const ROWS: usize = 64;
 const COLS: usize = 64;
@@ -225,10 +224,8 @@ enum GlobalArray {
 
 static mut GLOBAL_ARRAY: [[GlobalArray; COLS]; ROWS] = [[GlobalArray::None; COLS]; ROWS];
 
-lazy_static! {
-    static ref ELEMENTS_MAP: Mutex<HashMap<String, usize>> = Mutex::new(HashMap::new());
-    // static mut func_array: Vec<Vec<fn(Event)>> = vec![vec![]; 1024];
-}
+static ELEMENTS_MAP: LazyLock<Mutex<HashMap<String, usize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // Save a string in the map and return its index
 fn save_string(mut map: MutexGuard<HashMap<String, usize>>, s: &str) -> usize {
@@ -346,6 +343,16 @@ pub fn show_browser(
     unsafe { webui_show_browser(win, content_c_char, browser as usize) }
 }
 
+pub fn start_server(win: usize, content: impl AsRef<str> + Into<Vec<u8>>) -> String {
+    let content_c_str = CString::new(content).unwrap();
+    let content_c_char: *const c_char = content_c_str.as_ptr() as *const c_char;
+
+    unsafe {
+        let server = webui_start_server(win, content_c_char);
+        char_to_string(server)
+    }
+}
+
 pub fn is_shown(win: usize) -> bool {
     unsafe { webui_is_shown(win) }
 }
@@ -364,6 +371,16 @@ pub fn set_icon(win: usize, icon: &str, kind: &str) {
 pub fn set_runtime(win: usize, runtime: WebUIRuntime) {
     unsafe {
         webui_set_runtime(win, runtime as usize);
+    }
+}
+
+pub fn get_port(win: usize) -> usize {
+    unsafe { webui_get_port(win) }
+}
+
+pub fn set_config(option: WebUIConfig, enabled: bool) {
+    unsafe {
+        webui_set_config(option as webui_config, enabled);
     }
 }
 
@@ -396,28 +413,22 @@ unsafe extern "C" fn events_handler(
     let evt = Event {
         window,
         event_type: WebUIEvent::from_usize(event_type),
-        element,
+        element: char_to_string(element),
         event_number,
         bind_id,
     };
 
     // Call the Rust user function
-    let element_index_64 = element_index as usize;
     unsafe {
         let window_id = webui_interface_get_window_id(window);
-        let window_id_64 = window_id;
-        // func_list[window_id_64][element_index_64].expect("non-null function pointer")(E);
-        // func_array[window_id_64][element_index_64](E);
-        // if let Some(func) = GLOBAL_ARRAY[window_id_64][element_index_64] {
-        //     func(E.clone());
-        // }
-        if let GlobalArray::Some(func) = GLOBAL_ARRAY[window_id_64][element_index_64] {
+
+        if let GlobalArray::Some(func) = GLOBAL_ARRAY[window_id][element_index as usize] {
             func(evt);
         }
     }
 }
 
-pub fn bind(win: usize, element: &str, func: fn(Event)) {
+pub fn bind(win: usize, element: &str, func: fn(Event)) -> usize {
     let map = ELEMENTS_MAP.lock().unwrap();
 
     // Element String to i8/u8
@@ -433,18 +444,20 @@ pub fn bind(win: usize, element: &str, func: fn(Event)) {
         > = Some(events_handler);
 
         let window_id = webui_interface_get_window_id(win);
-        let window_id_64 = window_id;
-        let element_index_64 = element_index;
-
-        webui_interface_bind(win, element_c_char, f);
 
         // Add the Rust user function to the list
-        // let user_cb: Option<fn(e: Event)> = Some(func);
-        // func_list[window_id_64][element_index_64] = user_cb;
-        // func_array[window_id_64][element_index_64] = func;
-        // GLOBAL_ARRAY[window_id_64][element_index_64] = Some(func as FunctionType);
+        GLOBAL_ARRAY[window_id][element_index] = GlobalArray::Some(func as FunctionType);
 
-        GLOBAL_ARRAY[window_id_64][element_index_64] = GlobalArray::Some(func as FunctionType);
+        webui_interface_bind(win, element_c_char, f)
+    }
+}
+
+pub fn set_root_folder(win: usize, folder: &str) {
+    let folder_c_str = CString::new(folder).unwrap();
+    let folder_c_char: *const c_char = folder_c_str.as_ptr() as *const c_char;
+
+    unsafe {
+        webui_set_root_folder(win, folder_c_char);
     }
 }
 
