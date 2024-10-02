@@ -1,4 +1,4 @@
-use webui_rs::webui::{wait, Event, Window};
+use webui_rs::webui::{wait, WebUIEvent, Window};
 
 fn main() {
     let win = Window::new();
@@ -18,7 +18,7 @@ fn main() {
     wait();
 }
 
-fn log_to_js(e: Event) {
+fn log_to_js(e: WebUIEvent) {
     e.get_window().run_js(
         r#"
     console.log('Button clicked!')

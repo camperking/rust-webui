@@ -1,10 +1,10 @@
-use webui_rs::webui::{wait, Event, Window};
+use webui_rs::webui::{wait, WebUIEvent, Window};
 
 fn main() {
     let win = Window::new();
 
     // Inline function
-    win.bind("my_button", |_: Event| {
+    win.bind("my_button", |_: WebUIEvent| {
         println!("Button clicked!");
     });
 
