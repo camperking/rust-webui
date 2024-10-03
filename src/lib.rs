@@ -6,7 +6,7 @@ mod tests {
 
     #[test]
     fn test_webui_window() {
-        let win = webui::Window::new();
+        let win = webui::WebUIWindow::new();
         assert_eq!(win.id, 1);
         win.show("<span>Hello World</span>");
 

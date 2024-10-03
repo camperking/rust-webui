@@ -9,15 +9,15 @@ const HTML: &str = r#"
 "#;
 
 fn main() {
-    let win = webui::Window::new();
+    let win = webui::WebUIWindow::new();
 
     win.show_browser(HTML, webui::WebUIBrowser::Firefox);
 
-    webui::bind(win.id, "btn", |_| {
+    win.bind("btn", |_| {
         println!("Element clicked!");
     });
 
-    webui::bind(win.id, "add", |event| {
+    win.bind("add", |event| {
         let count = event.get_count();
         if count < 2 {
             return;

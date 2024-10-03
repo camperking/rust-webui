@@ -1,7 +1,7 @@
-use webui_rs::webui::{wait, Window};
+use webui_rs::webui::{wait, WebUIWindow};
 
 fn main() {
-    let win = Window::new();
+    let win = WebUIWindow::new();
 
     win.show("examples/html/index.html");
 
