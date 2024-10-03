@@ -22,16 +22,9 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::LazyLock;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
 use bindgen::*;
-
-// Consts
-pub const true_: u32 = 1;
-pub const false_: u32 = 0;
-pub const __bool_true_false_are_defined: u32 = 1;
-pub type size_t = ::std::os::raw::c_ulong;
-pub type wchar_t = ::std::os::raw::c_int;
 
 // Browsers
 pub type WebUIBrowser = webui_browser;
@@ -59,12 +52,38 @@ impl WebUIEventType {
 // Configs
 pub type WebUIConfig = webui_config;
 
-#[derive(Debug)]
-pub struct JavaScript {
-    pub timeout: usize,
-    pub script: String,
-    pub error: bool,
-    pub data: String,
+pub struct WebUIEventSimple {
+    pub window: usize,
+    pub event_type: WebUIEventType,
+    pub element: String,
+    pub event_number: usize,
+    pub bind_id: usize,
+}
+
+impl WebUIEventSimple {
+    pub fn set_response(&self, response: &str) {
+        interface_set_response(self.window, self.event_number, response);
+    }
+
+    pub fn get_string_at(&self, index: usize) -> String {
+        interface_get_string_at(self.window, self.event_number, index)
+    }
+
+    pub fn get_int_at(&self, index: usize) -> i64 {
+        interface_get_int_at(self.window, self.event_number, index)
+    }
+
+    pub fn get_float_at(&self, index: usize) -> f64 {
+        interface_get_float_at(self.window, self.event_number, index)
+    }
+
+    pub fn get_bool_at(&self, index: usize) -> bool {
+        interface_get_bool_at(self.window, self.event_number, index)
+    }
+
+    pub fn get_size_at(&self, index: usize) -> usize {
+        interface_get_size_at(self.window, self.event_number, index)
+    }
 }
 
 pub struct WebUIEvent {
@@ -73,41 +92,95 @@ pub struct WebUIEvent {
     pub element: String,
     pub event_number: usize,
     pub bind_id: usize,
-    //
-    pub client_id: Option<usize>,
-    pub connection_id: Option<usize>,
-    pub cookies: Option<String>,
-    e: Option<*mut webui_event_t>,
+    pub client_id: usize,
+    pub connection_id: usize,
+    pub cookies: String,
+    e: *mut webui_event_t,
 }
 
 impl WebUIEvent {
-    pub fn show_client(self, content: impl AsRef<str> + Into<Vec<u8>>) -> bool {
-        match self.e {
-            Some(e) => show_client(e, content),
-            None => false,
-        }
+    pub fn show_client(&self, content: impl AsRef<str> + Into<Vec<u8>>) -> bool {
+        show_client(self.e, content)
     }
 
     pub fn close_client(self) {
-        if let Some(e) = self.e {
-            close_client(e);
-        }
+        close_client(self.e);
     }
 
-    pub fn send_raw(self, function: &str, data: &[u8]) {
-        if let Some(e) = self.e {
-            send_raw_client(e, function, data);
-        }
+    pub fn send_raw(&self, function: &str, data: &[u8]) {
+        send_raw_client(self.e, function, data);
     }
 
-    pub fn navigate_client(self, url: &str) {
-        if let Some(e) = self.e {
-            navigate_client(e, url);
-        }
+    pub fn navigate_client(&self, url: &str) {
+        navigate_client(self.e, url);
     }
 
-    pub fn get_window(&self) -> Window {
-        Window::from_id(self.window)
+    pub fn run(&self, script: &str) {
+        run_client(self.e, script);
+    }
+
+    pub fn script(&self, script: &str, timeout: usize, buffer_length: usize) -> Result<String, ()> {
+        script_client(self.e, script, timeout, buffer_length)
+    }
+
+    pub fn get_count(&self) -> usize {
+        get_count(self.e)
+    }
+
+    pub fn get_int_at(&self, index: usize) -> i64 {
+        get_int_at(self.e, index)
+    }
+
+    pub fn get_int(&self) -> i64 {
+        get_int(self.e)
+    }
+
+    pub fn get_float_at(&self, index: usize) -> f64 {
+        get_float_at(self.e, index)
+    }
+
+    pub fn get_float(&self) -> f64 {
+        get_float(self.e)
+    }
+
+    pub fn get_string_at(&self, index: usize) -> String {
+        get_string_at(self.e, index)
+    }
+
+    pub fn get_string(&self) -> String {
+        get_string(self.e)
+    }
+
+    pub fn get_bool_at(&self, index: usize) -> bool {
+        get_bool_at(self.e, index)
+    }
+
+    pub fn get_bool(&self) -> bool {
+        get_bool(self.e)
+    }
+
+    pub fn get_size_at(&self, index: usize) -> usize {
+        get_size_at(self.e, index)
+    }
+
+    pub fn get_size(&self) -> usize {
+        get_size(self.e)
+    }
+
+    pub fn return_int(&self, value: i64) {
+        return_int(self.e, value);
+    }
+
+    pub fn return_float(&self, value: f64) {
+        return_float(self.e, value);
+    }
+
+    pub fn return_string(&self, value: &str) {
+        return_string(self.e, value);
+    }
+
+    pub fn return_bool(&self, value: bool) {
+        return_bool(self.e, value);
     }
 }
 
@@ -125,6 +198,10 @@ impl Window {
         Window { id }
     }
 
+    pub fn bind(&self, element: &str, func: fn(WebUIEvent)) -> usize {
+        bind(self.id, element, func)
+    }
+
     pub fn show(&self, content: impl AsRef<str>) -> bool {
         show(self.id, content.as_ref())
     }
@@ -137,33 +214,24 @@ impl Window {
         start_server(self.id, content.as_ref())
     }
 
-    pub fn is_shown(&self) -> bool {
-        is_shown(self.id)
+    pub fn show_wv(&self, content: impl AsRef<str>) -> bool {
+        show_wv(self.id, content.as_ref())
     }
 
-    pub fn get_port(&self) -> usize {
-        get_port(self.id)
+    pub fn set_kiosk(&self, kiosk: bool) {
+        set_kiosk(self.id, kiosk)
     }
 
-    pub fn bind(&self, element: impl AsRef<str>, func: fn(WebUIEvent)) -> usize {
-        interface_bind(self.id, element.as_ref(), func)
+    pub fn set_high_contrast(&self, high_contrast: bool) {
+        set_high_contrast(self.id, high_contrast)
     }
 
-    pub fn run_js(&self, js: impl AsRef<str>) -> JavaScript {
-        let mut js = JavaScript {
-            timeout: 0,
-            script: js.as_ref().to_string(),
-            error: false,
-            data: "".to_string(),
-        };
-
-        run_js(self.id, &mut js);
-
-        js
+    pub fn close(&self) {
+        close(self.id);
     }
 
-    pub fn set_icon(&self, icon: impl AsRef<str>, kind: impl AsRef<str>) {
-        set_icon(self.id, icon.as_ref(), kind.as_ref());
+    pub fn destroy(&self) {
+        destroy(self.id);
     }
 
     pub fn set_root_folder(&self, folder: impl AsRef<str>) {
@@ -177,16 +245,84 @@ impl Window {
         set_file_handler(self.id, handler);
     }
 
+    pub fn is_shown(&self) -> bool {
+        is_shown(self.id)
+    }
+
+    pub fn set_icon(&self, icon: impl AsRef<str>, kind: impl AsRef<str>) {
+        set_icon(self.id, icon.as_ref(), kind.as_ref());
+    }
+
+    pub fn send_raw(&self, function: &str, data: &[u8]) {
+        send_raw(self.id, function, data)
+    }
+
+    pub fn set_hide(&self, hide: bool) {
+        set_hide(self.id, hide);
+    }
+
+    pub fn set_size(&self, width: u32, height: u32) {
+        set_size(self.id, width, height);
+    }
+
+    pub fn set_position(&self, x: u32, y: u32) {
+        set_position(self.id, x, y);
+    }
+
+    pub fn set_profile(&self, name: &str, path: &str) {
+        set_profile(self.id, name, path);
+    }
+
+    pub fn set_proxy(&self, proxy: &str) {
+        set_proxy(self.id, proxy);
+    }
+
+    pub fn get_url(&self) -> String {
+        get_url(self.id)
+    }
+
+    pub fn set_public(&self, public: bool) {
+        set_public(self.id, public);
+    }
+
+    pub fn navigate(&self, url: &str) {
+        navigate(self.id, url);
+    }
+
+    pub fn delete_profile(&self) {
+        delete_profile(self.id);
+    }
+
+    pub fn get_parent_process_id(&self) -> usize {
+        get_parent_process_id(self.id)
+    }
+
+    pub fn get_child_process_id(&self) -> usize {
+        get_child_process_id(self.id)
+    }
+
+    pub fn get_port(&self) -> usize {
+        get_port(self.id)
+    }
+
+    pub fn set_port(&self, port: usize) -> bool {
+        set_port(self.id, port)
+    }
+
+    pub fn set_event_blocking(&self, blocking: bool) {
+        set_event_blocking(self.id, blocking);
+    }
+
+    pub fn run(&self, script: &str) {
+        run(self.id, script);
+    }
+
+    pub fn script(&self, js: &str, timeout: usize, buffer_length: usize) -> Result<String, ()> {
+        script(self.id, js, timeout, buffer_length)
+    }
+
     pub fn set_runtime(&self, runtime: WebUIRuntime) {
         set_runtime(self.id, runtime);
-    }
-
-    pub fn close(&self) {
-        close(self.id);
-    }
-
-    pub fn destroy(&self) {
-        destroy(self.id);
     }
 }
 
@@ -196,45 +332,62 @@ impl Drop for Window {
     }
 }
 
-// List of Rust user functions (2-dimensional array)
-type FunctionType = fn(WebUIEvent);
 const WINDOWS: usize = 64;
 const ELEMENTS: usize = 64;
 
-#[derive(Copy, Clone, Default)]
-enum GlobalArray {
-    #[default]
-    None,
-    Some(FunctionType),
+struct BindStore<T> {
+    func_store: Mutex<[[Option<T>; ELEMENTS]; WINDOWS]>,
+    elements_map: Mutex<HashMap<String, usize>>,
 }
 
-static mut GLOBAL_ARRAY: [[GlobalArray; ELEMENTS]; WINDOWS] =
-    [[GlobalArray::None; ELEMENTS]; WINDOWS];
-
-static ELEMENTS_MAP: LazyLock<Mutex<HashMap<String, usize>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-// Save a string in the map and return its index
-fn save_string(mut map: MutexGuard<HashMap<String, usize>>, s: &str) -> usize {
-    // Check if the string already exists in the map
-    if let Some(&index) = map.get(s) {
-        return index;
+impl<T: Copy> BindStore<T> {
+    fn new() -> BindStore<T> {
+        BindStore {
+            func_store: Mutex::new([[None; ELEMENTS]; WINDOWS]),
+            elements_map: Mutex::new(HashMap::new()),
+        }
     }
 
-    // If the string does not exist, add it to the map and return the new index
-    let index = map.len();
-    map.insert(s.to_owned(), index);
-    index
-}
+    fn save_string(&self, s: &str) -> usize {
+        let mut map = self.elements_map.lock().unwrap();
+        // Check if the string already exists in the map
+        if let Some(&index) = map.get(s) {
+            return index;
+        }
 
-// Search for a string in the map and return its index if found, or -1 if not found
-fn find_string(map: &HashMap<String, usize>, s: &str) -> isize {
-    if let Some(&index) = map.get(s) {
-        index as isize
-    } else {
-        -1
+        // If the string does not exist, add it to the map and return the new index
+        let index = map.len();
+        map.insert(s.to_owned(), index);
+        index
+    }
+
+    fn find_string(&self, s: &str) -> isize {
+        let map = self.elements_map.lock().unwrap();
+        if let Some(&index) = map.get(s) {
+            index as isize
+        } else {
+            -1
+        }
+    }
+
+    fn add_function(&self, window: usize, element: &str, func: T) {
+        let element_index = self.save_string(element);
+        self.func_store.lock().unwrap()[window][element_index] = Some(func);
+    }
+
+    fn get_function(&self, window: usize, element: &str) -> Option<T> {
+        let element_index = self.find_string(element);
+        if element_index < 0 {
+            return None;
+        }
+        self.func_store.lock().unwrap()[window][element_index as usize]
     }
 }
+
+static mut BIND_STORE_SIMPLE: LazyLock<BindStore<fn(WebUIEventSimple)>> =
+    LazyLock::new(|| BindStore::new());
+
+static mut BIND_STORE: LazyLock<BindStore<fn(WebUIEvent)>> = LazyLock::new(|| BindStore::new());
 
 fn char_to_string(c: *const i8) -> String {
     let cstr = unsafe { CStr::from_ptr(c) };
@@ -242,47 +395,10 @@ fn char_to_string(c: *const i8) -> String {
     s
 }
 
-fn cstr_to_string(c: CString) -> String {
-    let s: String = String::from_utf8_lossy(c.to_bytes()).to_string();
-    s
-}
-
-pub fn run_js(win: usize, js: &mut JavaScript) {
-    /// The WebUI Script Interface
-    struct WebUIScriptIntf {
-        timeout: usize,
-        script: *mut i8,
-        error: bool,
-        data: *const i8,
-        length: usize,
-    }
-
-    unsafe {
-        // Script String to i8/u8
-        let script_cpy = js.script.clone();
-        let script_c_str = CString::new(script_cpy).unwrap();
-        let script_c_char: *mut c_char = script_c_str.as_ptr() as *mut c_char;
-
-        let wuisi = WebUIScriptIntf {
-            timeout: js.timeout,
-            script: script_c_char,
-            data: script_c_char,
-            error: false,
-            length: 0,
-        };
-
-        webui_script(
-            win,
-            wuisi.script,
-            wuisi.timeout,
-            script_c_char,
-            wuisi.length,
-        );
-
-        js.error = wuisi.error;
-        js.data = char_to_string(wuisi.data);
-    }
-}
+// fn cstr_to_string(c: CString) -> String {
+//     let s: String = String::from_utf8_lossy(c.to_bytes()).to_string();
+//     s
+// }
 
 // Function Implementations
 
@@ -305,13 +421,9 @@ pub fn get_new_window_id() -> usize {
 }
 
 pub fn bind(win: usize, element: &str, func: fn(WebUIEvent)) -> usize {
-    let map = ELEMENTS_MAP.lock().unwrap();
-
     // Element String to i8/u8
     let element_c_str = CString::new(element).unwrap();
     let element_c_char: *const c_char = element_c_str.as_ptr() as *const c_char;
-
-    let element_index = save_string(map, element);
 
     // Bind
     unsafe {
@@ -320,37 +432,30 @@ pub fn bind(win: usize, element: &str, func: fn(WebUIEvent)) -> usize {
         let window_id = webui_interface_get_window_id(win);
 
         // Add the Rust user function to the list
-        GLOBAL_ARRAY[window_id][element_index] = GlobalArray::Some(func as FunctionType);
+        BIND_STORE.add_function(window_id, element, func);
 
         webui_bind(win, element_c_char, f)
     }
 }
 
 unsafe extern "C" fn bind_events_handler(event: *mut webui_event_t) {
-    let map = ELEMENTS_MAP.lock().unwrap();
-
-    let element_index = find_string(&map, &char_to_string((*event).element));
-    if element_index < 0 {
-        return;
-    }
-
     let evt = WebUIEvent {
         window: (*event).window,
         event_type: WebUIEventType::from_usize((*event).event_type),
         element: char_to_string((*event).element),
         event_number: (*event).event_number,
         bind_id: (*event).bind_id,
-        client_id: Some((*event).client_id),
-        connection_id: Some((*event).connection_id),
-        cookies: Some(char_to_string((*event).cookies)),
-        e: Some(event),
+        client_id: (*event).client_id,
+        connection_id: (*event).connection_id,
+        cookies: char_to_string((*event).cookies),
+        e: event,
     };
 
     // Call the Rust user function
     unsafe {
         let window_id = webui_interface_get_window_id((*event).window);
 
-        if let GlobalArray::Some(func) = GLOBAL_ARRAY[window_id][element_index as usize] {
+        if let Some(func) = BIND_STORE.get_function(window_id, &evt.element) {
             func(evt);
         }
     }
@@ -556,7 +661,9 @@ pub fn malloc(size: usize) -> *mut std::os::raw::c_void {
     unsafe { webui_malloc(size) }
 }
 
-pub fn send_raw(win: usize, function: &str, raw: *mut std::os::raw::c_void, size: usize) {
+pub fn send_raw(win: usize, function: &str, data: &[u8]) {
+    let size = data.len();
+    let raw = data.as_ptr() as *mut std::os::raw::c_void;
     let function_c_str = CString::new(function).unwrap();
     let function_c_char: *const c_char = function_c_str.as_ptr() as *const c_char;
 
@@ -565,18 +672,11 @@ pub fn send_raw(win: usize, function: &str, raw: *mut std::os::raw::c_void, size
     }
 }
 
-pub fn send_raw_client(
-    event: *mut webui_event_t,
-    function: &str,
-    // raw: *mut std::os::raw::c_void,
-    // size: usize,
-    data: &[u8],
-) {
+pub fn send_raw_client(event: *mut webui_event_t, function: &str, data: &[u8]) {
+    let size = data.len();
+    let raw = data.as_ptr() as *mut std::os::raw::c_void;
     let function_c_str = CString::new(function).unwrap();
     let function_c_char: *const c_char = function_c_str.as_ptr() as *const c_char;
-
-    let raw = data.as_ptr() as *mut std::os::raw::c_void;
-    let size = data.len();
 
     unsafe {
         webui_send_raw_client(event, function_c_char, raw, size);
@@ -768,7 +868,6 @@ pub fn script(
     }
 }
 
-//fn script_client
 pub fn script_client(
     event: *mut webui_event_t,
     script: &str,
@@ -879,43 +978,28 @@ unsafe extern "C" fn events_handler(
     event_number: usize,
     bind_id: usize,
 ) {
-    let map = ELEMENTS_MAP.lock().unwrap();
-
-    let element_index = find_string(&map, &char_to_string(element));
-    if element_index < 0 {
-        return;
-    }
-
-    let evt = WebUIEvent {
-        window,
-        event_type: WebUIEventType::from_usize(event_type),
-        element: char_to_string(element),
-        event_number,
-        bind_id,
-        client_id: None,
-        connection_id: None,
-        cookies: None,
-        e: None,
-    };
-
     // Call the Rust user function
     unsafe {
         let window_id = webui_interface_get_window_id(window);
 
-        if let GlobalArray::Some(func) = GLOBAL_ARRAY[window_id][element_index as usize] {
+        if let Some(func) = BIND_STORE_SIMPLE.get_function(window_id, &char_to_string(element)) {
+            let evt = WebUIEventSimple {
+                window,
+                event_type: WebUIEventType::from_usize(event_type),
+                element: char_to_string(element),
+                event_number,
+                bind_id,
+            };
+
             func(evt);
         }
     }
 }
 
-pub fn interface_bind(win: usize, element: &str, func: fn(WebUIEvent)) -> usize {
-    let map = ELEMENTS_MAP.lock().unwrap();
-
+pub fn interface_bind(win: usize, element: &str, func: fn(WebUIEventSimple)) -> usize {
     // Element String to i8/u8
     let element_c_str = CString::new(element).unwrap();
     let element_c_char: *const c_char = element_c_str.as_ptr() as *const c_char;
-
-    let element_index = save_string(map, element);
 
     // Bind
     unsafe {
@@ -926,7 +1010,7 @@ pub fn interface_bind(win: usize, element: &str, func: fn(WebUIEvent)) -> usize 
         let window_id = webui_interface_get_window_id(win);
 
         // Add the Rust user function to the list
-        GLOBAL_ARRAY[window_id][element_index] = GlobalArray::Some(func as FunctionType);
+        BIND_STORE_SIMPLE.add_function(window_id, element, func);
 
         webui_interface_bind(win, element_c_char, f)
     }
@@ -939,6 +1023,10 @@ pub fn interface_set_response(win: usize, event_number: usize, response: &str) {
     unsafe {
         webui_interface_set_response(win, event_number, response_c_char);
     }
+}
+
+pub fn get_window_id(win: usize) -> usize {
+    unsafe { webui_interface_get_window_id(win) }
 }
 
 pub fn interface_is_app_running() -> bool {
