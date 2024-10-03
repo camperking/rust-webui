@@ -58,8 +58,24 @@ fn main() {
     }
 
     download(target, &out_dir);
+
     println!("cargo:rustc-link-search=native={}/{}", out_dir, target);
-    println!("cargo:rustc-link-lib=webui-2-static");
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        println!("cargo:rustc-link-lib=webui-2-static");
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        println!("cargo:rustc-link-lib=dylib=webui-2");
+
+        let src = format!("{}/{}/webui-2.dll", out_dir, target);
+        let dst = format!("{}/../../../webui-2.dll", out_dir);
+
+        std::fs::copy(src, dst).unwrap();
+    }
+
 }
 
 fn download(target: &str, cache_dir: &str) {
