@@ -1,4 +1,6 @@
 use webui_rs::webui;
+use webui_rs::window;
+use webui_rs::WebUIBrowser;
 
 const HTML: &str = r#"
 <html>
@@ -9,9 +11,9 @@ const HTML: &str = r#"
 "#;
 
 fn main() {
-    let win = webui::WebUIWindow::new();
+    let win = window::WebUIWindow::new();
 
-    win.show_browser(HTML, webui::WebUIBrowser::Firefox);
+    win.show_browser(HTML, WebUIBrowser::Firefox);
 
     win.bind("btn", |_| {
         println!("Element clicked!");
