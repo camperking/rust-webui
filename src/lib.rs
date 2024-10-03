@@ -6,15 +6,21 @@ pub mod events;
 pub mod webui;
 pub mod window;
 
+// Re-export
+// pub use bindgen::*;
+// pub use events::*;
+// pub use webui::*;
+pub use window::Window;
+
 use bindgen::{webui_browser, webui_config, webui_runtime};
 use std::ffi::CStr;
 
 // Browsers
-pub type WebUIBrowser = webui_browser;
+pub type Browser = webui_browser;
 // Runtimes
-pub type WebUIRuntime = webui_runtime;
+pub type Runtime = webui_runtime;
 // Configs
-pub type WebUIConfig = webui_config;
+pub type Config = webui_config;
 
 fn char_to_string(c: *const i8) -> String {
     let cstr = unsafe { CStr::from_ptr(c) };
@@ -28,7 +34,7 @@ mod tests {
 
     #[test]
     fn test_webui_window() {
-        let win = window::WebUIWindow::new();
+        let win = window::Window::new();
         assert_eq!(win.id, 1);
         win.show("<span>Hello World</span>");
 

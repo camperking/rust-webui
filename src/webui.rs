@@ -16,10 +16,10 @@
 
 // Modules
 use crate::char_to_string;
-use crate::events::WebUIEventSimple;
-use crate::events::WebUIEventType;
-use crate::WebUIBrowser;
-use crate::WebUIConfig;
+use crate::events::EventSimple;
+use crate::events::EventType;
+use crate::Browser;
+use crate::Config;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::raw::c_char;
@@ -80,7 +80,7 @@ impl<T: Copy> BindStore<T> {
     }
 }
 
-static mut BIND_STORE_SIMPLE: LazyLock<BindStore<fn(WebUIEventSimple)>> =
+static mut BIND_STORE_SIMPLE: LazyLock<BindStore<fn(EventSimple)>> =
     LazyLock::new(|| BindStore::new());
 
 // Function Implementations
@@ -106,7 +106,7 @@ pub fn is_high_contrast() -> bool {
     unsafe { webui_is_high_contrast() }
 }
 
-pub fn browser_exist(browser: WebUIBrowser) {
+pub fn browser_exist(browser: Browser) {
     unsafe {
         webui_browser_exist(browser as usize);
     }
@@ -194,7 +194,7 @@ pub fn get_free_port() -> usize {
     unsafe { webui_get_free_port() }
 }
 
-pub fn set_config(option: WebUIConfig, enabled: bool) {
+pub fn set_config(option: Config, enabled: bool) {
     unsafe {
         webui_set_config(option as webui_config, enabled);
     }
@@ -231,9 +231,9 @@ unsafe extern "C" fn events_handler(
         let window_id = webui_interface_get_window_id(window);
 
         if let Some(func) = BIND_STORE_SIMPLE.get_function(window_id, &char_to_string(element)) {
-            let evt = WebUIEventSimple {
+            let evt = EventSimple {
                 win: window,
-                event_type: WebUIEventType::from_usize(event_type),
+                event_type: EventType::from_usize(event_type),
                 element: char_to_string(element),
                 event_number,
                 bind_id,
@@ -244,7 +244,7 @@ unsafe extern "C" fn events_handler(
     }
 }
 
-pub fn interface_bind(win: usize, element: &str, func: fn(WebUIEventSimple)) -> usize {
+pub fn interface_bind(win: usize, element: &str, func: fn(EventSimple)) -> usize {
     // Element String to i8/u8
     let element_c_str = CString::new(element).unwrap();
     let element_c_char: *const c_char = element_c_str.as_ptr() as *const c_char;

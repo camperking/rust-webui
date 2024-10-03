@@ -6,11 +6,11 @@
 
 // Modules
 use crate::char_to_string;
-use crate::events::WebUIEvent;
+use crate::events::Event;
 use crate::webui::BindStore;
 use crate::webui::*;
-use crate::WebUIBrowser;
-use crate::WebUIRuntime;
+use crate::Browser;
+use crate::Runtime;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::sync::LazyLock;
@@ -19,23 +19,23 @@ use crate::bindgen::*;
 
 const WINDOWS: usize = 64;
 const ELEMENTS: usize = 64;
-static mut BIND_STORE: LazyLock<BindStore<fn(WebUIEvent)>> = LazyLock::new(|| BindStore::new());
+static mut BIND_STORE: LazyLock<BindStore<fn(Event)>> = LazyLock::new(|| BindStore::new());
 
-pub struct WebUIWindow {
+pub struct Window {
     pub id: usize,
 }
 
-impl WebUIWindow {
-    pub fn new() -> WebUIWindow {
+impl Window {
+    pub fn new() -> Window {
         let id = new_window();
-        WebUIWindow { id }
+        Window { id }
     }
 
-    pub fn from_id(id: usize) -> WebUIWindow {
-        WebUIWindow { id }
+    pub fn from_id(id: usize) -> Window {
+        Window { id }
     }
 
-    pub fn bind(&self, element: &str, func: fn(WebUIEvent)) -> usize {
+    pub fn bind(&self, element: &str, func: fn(Event)) -> usize {
         // Element String to i8/u8
         let element_c_str = CString::new(element).unwrap();
         let element_c_char: *const c_char = element_c_str.as_ptr() as *const c_char;
@@ -53,24 +53,24 @@ impl WebUIWindow {
         }
     }
 
-    pub fn get_best_browser(&self) -> WebUIBrowser {
+    pub fn get_best_browser(&self) -> Browser {
         unsafe {
             match webui_get_best_browser(self.id) {
-                0 => WebUIBrowser::NoBrowser,
-                1 => WebUIBrowser::AnyBrowser,
-                2 => WebUIBrowser::Chrome,
-                3 => WebUIBrowser::Firefox,
-                4 => WebUIBrowser::Edge,
-                5 => WebUIBrowser::Safari,
-                6 => WebUIBrowser::Chromium,
-                7 => WebUIBrowser::Opera,
-                8 => WebUIBrowser::Brave,
-                9 => WebUIBrowser::Vivaldi,
-                10 => WebUIBrowser::Epic,
-                11 => WebUIBrowser::Yandex,
-                12 => WebUIBrowser::ChromiumBased,
-                13 => WebUIBrowser::Webview,
-                _ => WebUIBrowser::NoBrowser,
+                0 => Browser::NoBrowser,
+                1 => Browser::AnyBrowser,
+                2 => Browser::Chrome,
+                3 => Browser::Firefox,
+                4 => Browser::Edge,
+                5 => Browser::Safari,
+                6 => Browser::Chromium,
+                7 => Browser::Opera,
+                8 => Browser::Brave,
+                9 => Browser::Vivaldi,
+                10 => Browser::Epic,
+                11 => Browser::Yandex,
+                12 => Browser::ChromiumBased,
+                13 => Browser::Webview,
+                _ => Browser::NoBrowser,
             }
         }
     }
@@ -85,7 +85,7 @@ impl WebUIWindow {
         }
     }
 
-    pub fn show_browser(&self, content: &str, browser: WebUIBrowser) -> bool {
+    pub fn show_browser(&self, content: &str, browser: Browser) -> bool {
         let content_c_str = CString::new(content).unwrap();
         let content_c_char: *const c_char = content_c_str.as_ptr() as *const c_char;
 
@@ -295,21 +295,21 @@ impl WebUIWindow {
         }
     }
 
-    pub fn set_runtime(&self, runtime: WebUIRuntime) {
+    pub fn set_runtime(&self, runtime: Runtime) {
         unsafe {
             webui_set_runtime(self.id, runtime as usize);
         }
     }
 }
 
-impl Drop for WebUIWindow {
+impl Drop for Window {
     fn drop(&mut self) {
         self.destroy();
     }
 }
 
 unsafe extern "C" fn bind_events_handler(event: *mut webui_event_t) {
-    let evt = WebUIEvent::new(event);
+    let evt = Event::new(event);
 
     // Call the Rust user function
     unsafe {

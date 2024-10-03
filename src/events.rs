@@ -5,31 +5,31 @@ use crate::bindgen::*;
 use crate::char_to_string;
 
 // Events
-pub type WebUIEventType = webui_event;
+pub type EventType = webui_event;
 
 // Implement into<usize>
-impl WebUIEventType {
-    pub fn from_usize(value: usize) -> WebUIEventType {
+impl EventType {
+    pub fn from_usize(value: usize) -> EventType {
         match value {
-            0 => WebUIEventType::WEBUI_EVENT_DISCONNECTED,
-            1 => WebUIEventType::WEBUI_EVENT_CONNECTED,
-            2 => WebUIEventType::WEBUI_EVENT_MOUSE_CLICK,
-            3 => WebUIEventType::WEBUI_EVENT_NAVIGATION,
-            4 => WebUIEventType::WEBUI_EVENT_CALLBACK,
-            _ => WebUIEventType::WEBUI_EVENT_CALLBACK,
+            0 => EventType::WEBUI_EVENT_DISCONNECTED,
+            1 => EventType::WEBUI_EVENT_CONNECTED,
+            2 => EventType::WEBUI_EVENT_MOUSE_CLICK,
+            3 => EventType::WEBUI_EVENT_NAVIGATION,
+            4 => EventType::WEBUI_EVENT_CALLBACK,
+            _ => EventType::WEBUI_EVENT_CALLBACK,
         }
     }
 }
 
-pub struct WebUIEventSimple {
+pub struct EventSimple {
     pub win: usize,
-    pub event_type: WebUIEventType,
+    pub event_type: EventType,
     pub element: String,
     pub event_number: usize,
     pub bind_id: usize,
 }
 
-impl WebUIEventSimple {
+impl EventSimple {
     pub fn set_response(&self, response: &str) {
         // interface_set_response(self.window, self.event_number, response);
         let response_c_str = CString::new(response).unwrap();
@@ -64,9 +64,9 @@ impl WebUIEventSimple {
     }
 }
 
-pub struct WebUIEvent {
+pub struct Event {
     pub win: usize,
-    pub event_type: WebUIEventType,
+    pub event_type: EventType,
     pub element: String,
     pub event_number: usize,
     pub bind_id: usize,
@@ -76,11 +76,11 @@ pub struct WebUIEvent {
     event: *mut webui_event_t,
 }
 
-impl WebUIEvent {
-    pub fn new(event: *mut webui_event_t) -> WebUIEvent {
+impl Event {
+    pub fn new(event: *mut webui_event_t) -> Event {
         unsafe {
             let win = (*event).window;
-            let event_type = WebUIEventType::from_usize((*event).event_type);
+            let event_type = EventType::from_usize((*event).event_type);
             let element = char_to_string((*event).element);
             let event_number = (*event).event_number;
             let bind_id = (*event).bind_id;
@@ -88,7 +88,7 @@ impl WebUIEvent {
             let connection_id = (*event).connection_id;
             let cookies = char_to_string((*event).cookies);
 
-            WebUIEvent {
+            Event {
                 win,
                 event_type,
                 element,
